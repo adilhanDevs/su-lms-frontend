@@ -41,6 +41,10 @@ export const useAuth = () => {
       console.log("🔑 Role detected: lecturer");
       return "lecturer";
     }
+    if (user.is_methodologist) {
+      console.log("🔑 Role detected: methodologist");
+      return "methodologist";
+    }
     if (user.is_accountant) {
       console.log("🔑 Role detected: accountant");
       return "accountant";

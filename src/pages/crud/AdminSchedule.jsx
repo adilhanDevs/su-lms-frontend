@@ -43,6 +43,7 @@ const AdminSchedule = () => {
     lesson_time: "",
     day: "Monday",
     date: "",
+    room: "",
   });
 
   const daysOfWeek = [
@@ -127,6 +128,7 @@ const AdminSchedule = () => {
         lesson_time: schedule.lesson_time || "",
         day: schedule.day,
         date: schedule.date || "",
+        room: schedule.room || "",
       });
     } else {
       setEditingSchedule(null);
@@ -136,6 +138,7 @@ const AdminSchedule = () => {
         lesson_time: timeSlot?.id || "",
         day: day || selectedDay,
         date: "",
+        room: "",
       });
     }
     setShowModal(true);
@@ -170,6 +173,10 @@ const AdminSchedule = () => {
 
       if (formData.date) {
         data.date = formData.date;
+      }
+
+      if (formData.room) {
+        data.room = formData.room;
       }
 
       console.log("Submitting schedule data:", data);
@@ -1040,12 +1047,12 @@ const AdminSchedule = () => {
                                     {schedule.lecturer_name}
                                   </p>
                                 )}
-                                {schedule.classroom && (
+                                {(schedule.room || schedule.classroom) && (
                                   <p className="text-xs text-gray-600">
                                     <span className="font-medium">
                                       Аудитория:
                                     </span>{" "}
-                                    {schedule.classroom}
+                                    {schedule.room || schedule.classroom}
                                   </p>
                                 )}
                                 <div className="mt-3 pt-2 border-t border-blue-200 flex items-center justify-between">
@@ -1419,6 +1426,25 @@ const AdminSchedule = () => {
                   <p className="text-xs text-gray-500 mt-2">
                     Укажите для разового занятия. Если оставить пустым, занятие
                     будет регулярным
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <span className="flex items-center gap-2">
+                      🏫 Кабинет / Аудитория (опционально)
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    name="room"
+                    value={formData.room}
+                    onChange={handleInputChange}
+                    placeholder="Например: 301, Лаб. 5, Ауд. 12"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    Номер кабинета или аудитории где будет проходить занятие
                   </p>
                 </div>
 

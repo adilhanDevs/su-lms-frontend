@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth'
 import ParentDashboard from './users/parent.jsx'
 import AdminLayout from '../componenets/AdminLayout.jsx'
 import AccountantDashboard from './users/accountant.jsx'
+import MethodologistDashboard from './users/methodologist.jsx'
 
 const Dashboard = () => {
   const { loading, role } = useAuth()
@@ -42,7 +43,17 @@ const Dashboard = () => {
     case 'parent':
       return <ParentDashboard />
     case 'accountant':
-      return <AccountantDashboard />
+      return (
+        <AdminLayout>
+          <AccountantDashboard />
+        </AdminLayout>
+      )
+    case 'methodologist':
+      return (
+        <AdminLayout>
+          <MethodologistDashboard />
+        </AdminLayout>
+      )
     default:
       return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">

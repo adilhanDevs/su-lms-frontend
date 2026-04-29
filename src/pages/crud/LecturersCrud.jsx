@@ -1,5 +1,6 @@
 import React from "react";
 import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import api from "../../api.js";
 import {
   Plus,
@@ -15,14 +16,15 @@ import {
   Eye,
   ChevronRight,
   Search,
-  Filter,
-  MoreVertical,
   CheckCircle,
   XCircle,
-  Loader2
+  Loader2,
+  BookOpen,
+  X
 } from "lucide-react";
 
 const LecturersPanel = () => {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -30,7 +32,20 @@ const LecturersPanel = () => {
     address: "",
     phone: "",
     email: "",
+    password: "",
   });
+
+  // Course allocation fields
+  const [allocationData, setAllocationData] = useState({
+    semester: "",
+    group: "",
+    courses: [],
+  });
+  const [courses, setCourses] = useState([]);
+  const [semesters, setSemesters] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [showAllocation, setShowAllocation] = useState(false);
+
   const [teachersList, setTeachersList] = useState([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -40,9 +55,15 @@ const LecturersPanel = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prevState) => ({
-      ...prevState,
-      [name]: value,
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const toggleCourse = (courseId) => {
+    setAllocationData((prev) => ({
+      ...prev,
+      courses: prev.courses.includes(courseId)
+        ? prev.courses.filter((id) => id !== courseId)
+        : [...prev.courses, courseId],
     }));
   };
 
@@ -62,33 +83,51 @@ const LecturersPanel = () => {
           address: formData.address,
           phone: formData.phone,
           email: formData.email,
+          ...(formData.password ? { password: formData.password } : {}),
         },
       };
 
       const response = await api.post("accounts/lecturers/create/", submitData);
-      setMessage("Lecturer created successfully!");
-      console.log("Lecturer created successfully:", response.data);
+      const newLecturerUserId = response.data?.lecturer_user_id;
 
-      setFormData({
-        first_name: "",
-        last_name: "",
-        gender: "",
-        address: "",
-        phone: "",
-        email: "",
-      });
-      
-      fetchLecturers();
-    } catch (error) {
-      console.error("Error creating lecturer:", error);
-      if (error.response && error.response.data) {
-        const errorData = error.response.data;
-        if (typeof errorData === "object") {
-          const errorMessages = Object.values(errorData).flat().join(", ");
-          setError(`Error: ${errorMessages}`);
-        } else {
-          setError(`Error: ${errorData}`);
+      // Create course allocation if courses, semester, and group are selected
+      if (
+        showAllocation &&
+        newLecturerUserId &&
+        allocationData.courses.length > 0 &&
+        allocationData.semester &&
+        allocationData.group
+      ) {
+        try {
+          await api.post("api/course-allocations/create/", {
+            lecturer: newLecturerUserId,
+            courses: allocationData.courses,
+            semester: allocationData.semester,
+            group: allocationData.group,
+          });
+        } catch (allocErr) {
+          console.error("Allocation error:", allocErr);
+          setMessage("Lecturer created, but course allocation failed: " + (allocErr.response?.data ? JSON.stringify(allocErr.response.data) : allocErr.message));
+          fetchLecturers();
+          return;
         }
+      }
+
+      setMessage(
+        showAllocation && allocationData.courses.length > 0
+          ? "Lecturer created and courses assigned successfully!"
+          : "Lecturer created successfully!"
+      );
+
+      setFormData({ first_name: "", last_name: "", gender: "", address: "", phone: "", email: "", password: "" });
+      setAllocationData({ semester: "", group: "", courses: [] });
+      setShowAllocation(false);
+      fetchLecturers();
+    } catch (err) {
+      console.error("Error creating lecturer:", err);
+      if (err.response?.data) {
+        const d = err.response.data;
+        setError("Error: " + (typeof d === "object" ? Object.values(d).flat().join(", ") : d));
       } else {
         setError("An error occurred while creating the lecturer");
       }
@@ -101,19 +140,23 @@ const LecturersPanel = () => {
     try {
       const response = await api.get("accounts/lecturers/");
       setTeachersList(response.data || []);
-    } catch (error) {
-      console.error("Error fetching teachers:", error);
+    } catch (err) {
+      console.error("Error fetching teachers:", err);
     }
   };
 
   useEffect(() => {
     fetchLecturers();
+    api.get("api/courses/").then((r) => setCourses(r.data || [])).catch(() => {});
+    api.get("api/semesters/").then((r) => setSemesters(r.data || [])).catch(() => {});
+    api.get("accounts/groups/").then((r) => setGroups(r.data || [])).catch(() => {});
   }, []);
 
   const filteredTeachers = (teachersList.lecturers || teachersList).filter((teacher) => {
     const fullName = `${teacher.lecturer?.first_name || ""} ${teacher.lecturer?.last_name || ""}`.toLowerCase();
-    const matchesSearch = fullName.includes(searchTerm.toLowerCase()) || 
-                         (teacher.lecturer?.email || "").toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch =
+      fullName.includes(searchTerm.toLowerCase()) ||
+      (teacher.lecturer?.email || "").toLowerCase().includes(searchTerm.toLowerCase());
     const matchesGender = genderFilter === "all" || teacher.lecturer?.gender === genderFilter;
     return matchesSearch && matchesGender;
   });
@@ -128,23 +171,23 @@ const LecturersPanel = () => {
               <h1 className="text-3xl font-bold text-gray-900">Lecturer Management</h1>
               <p className="text-gray-600 mt-1">Create and manage lecturer accounts</p>
             </div>
-            <a
-              href="/"
+            <Link
+              to="/"
               className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
             >
               <ChevronRight className="w-4 h-4 rotate-180" />
               Back to Dashboard
-            </a>
+            </Link>
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600 font-medium mb-1">Total Lecturers</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {teachersList.count || (teachersList.lecturers || teachersList).length}
+                    {(teachersList.lecturers || teachersList).length}
                   </p>
                 </div>
                 <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
@@ -157,7 +200,7 @@ const LecturersPanel = () => {
                 <div>
                   <p className="text-sm text-gray-600 font-medium mb-1">Active</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {teachersList.count || (teachersList.lecturers || teachersList).length}
+                    {(teachersList.lecturers || teachersList).length}
                   </p>
                 </div>
                 <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
@@ -170,7 +213,7 @@ const LecturersPanel = () => {
                 <div>
                   <p className="text-sm text-gray-600 font-medium mb-1">Male</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {(teachersList.lecturers || teachersList).filter(t => t.lecturer?.gender === "M").length}
+                    {(teachersList.lecturers || teachersList).filter((t) => t.lecturer?.gender === "M").length}
                   </p>
                 </div>
                 <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center">
@@ -183,7 +226,7 @@ const LecturersPanel = () => {
                 <div>
                   <p className="text-sm text-gray-600 font-medium mb-1">Female</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {(teachersList.lecturers || teachersList).filter(t => t.lecturer?.gender === "F").length}
+                    {(teachersList.lecturers || teachersList).filter((t) => t.lecturer?.gender === "F").length}
                   </p>
                 </div>
                 <div className="w-12 h-12 rounded-xl bg-pink-100 flex items-center justify-center">
@@ -249,9 +292,7 @@ const LecturersPanel = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      First Name *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
                     <input
                       type="text"
                       name="first_name"
@@ -262,11 +303,8 @@ const LecturersPanel = () => {
                       placeholder="John"
                     />
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Last Name *
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Last Name *</label>
                     <input
                       type="text"
                       name="last_name"
@@ -281,9 +319,7 @@ const LecturersPanel = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Gender
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
                     <select
                       name="gender"
                       value={formData.gender}
@@ -295,7 +331,6 @@ const LecturersPanel = () => {
                       <option value="F">Female</option>
                     </select>
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       <span className="flex items-center gap-2">
@@ -331,6 +366,137 @@ const LecturersPanel = () => {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <span className="flex items-center gap-2">
+                      <Shield className="w-4 h-4" />
+                      Custom Password (Optional)
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    placeholder="Leave blank to auto-generate and email"
+                  />
+                </div>
+
+                {/* Course Allocation Toggle */}
+                <div className="border-t border-gray-200 pt-6">
+                  <button
+                    type="button"
+                    onClick={() => setShowAllocation(!showAllocation)}
+                    className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    {showAllocation ? "Hide Course Assignment" : "+ Assign Courses (Optional)"}
+                  </button>
+
+                  {showAllocation && (
+                    <div className="mt-4 p-4 bg-blue-50 rounded-xl space-y-4">
+                      <p className="text-sm text-blue-700 font-medium">
+                        Assign this lecturer to courses for a specific semester and group.
+                      </p>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Semester</label>
+                          <select
+                            value={allocationData.semester}
+                            onChange={(e) =>
+                              setAllocationData((prev) => ({ ...prev, semester: e.target.value }))
+                            }
+                            className="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm"
+                          >
+                            <option value="">Select Semester</option>
+                            {semesters.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Group</label>
+                          <select
+                            value={allocationData.group}
+                            onChange={(e) =>
+                              setAllocationData((prev) => ({ ...prev, group: e.target.value }))
+                            }
+                            className="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm"
+                          >
+                            <option value="">Select Group</option>
+                            {groups.map((g) => (
+                              <option key={g.id} value={g.id}>
+                                {g.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Courses{" "}
+                          {allocationData.courses.length > 0 && (
+                            <span className="text-blue-600">({allocationData.courses.length} selected)</span>
+                          )}
+                        </label>
+                        {courses.length === 0 ? (
+                          <p className="text-sm text-gray-500">No courses available.</p>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                            {courses.map((c) => (
+                              <label
+                                key={c.id}
+                                className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors text-sm ${
+                                  allocationData.courses.includes(c.id)
+                                    ? "bg-blue-100 border-blue-400 text-blue-800"
+                                    : "bg-white border-gray-200 text-gray-700 hover:border-blue-300"
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={allocationData.courses.includes(c.id)}
+                                  onChange={() => toggleCourse(c.id)}
+                                  className="w-4 h-4 accent-blue-600"
+                                />
+                                {c.title || c.name}
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {allocationData.courses.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {allocationData.courses.map((id) => {
+                            const c = courses.find((x) => x.id === id);
+                            return (
+                              <span
+                                key={id}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-600 text-white text-xs rounded-full font-medium"
+                              >
+                                {c?.title || c?.name || id}
+                                <button
+                                  type="button"
+                                  onClick={() => toggleCourse(id)}
+                                  className="hover:text-blue-200"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex justify-end pt-4">
                   <button
                     type="submit"
@@ -356,28 +522,26 @@ const LecturersPanel = () => {
             </div>
           </div>
 
-          {/* Right Column - Quick Stats */}
+          {/* Right Column */}
           <div>
             <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-6 text-white mb-6">
               <h3 className="text-lg font-bold mb-4">Quick Stats</h3>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-blue-100">Total Lecturers</span>
-                  <span className="font-bold">{teachersList.count || (teachersList.lecturers || teachersList).length}</span>
+                  <span className="font-bold">{(teachersList.lecturers || teachersList).length}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-blue-100">Active This Month</span>
-                  <span className="font-bold">
-                    {teachersList.count || (teachersList.lecturers || teachersList).length}
-                  </span>
+                  <span className="text-blue-100">Available Courses</span>
+                  <span className="font-bold">{courses.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-blue-100">Average Experience</span>
-                  <span className="font-bold">5.2 yrs</span>
+                  <span className="text-blue-100">Groups</span>
+                  <span className="font-bold">{groups.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-blue-100">Courses Assigned</span>
-                  <span className="font-bold">147</span>
+                  <span className="text-blue-100">Semesters</span>
+                  <span className="font-bold">{semesters.length}</span>
                 </div>
               </div>
             </div>
@@ -395,13 +559,13 @@ const LecturersPanel = () => {
                   <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
                     <div className="w-2 h-2 rounded-full bg-green-600"></div>
                   </div>
-                  <p className="text-sm text-gray-600">Phone number helps for emergency contact</p>
+                  <p className="text-sm text-gray-600">Click "+ Assign Courses" to link courses during creation</p>
                 </li>
                 <li className="flex items-start gap-2">
                   <div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
                     <div className="w-2 h-2 rounded-full bg-purple-600"></div>
                   </div>
-                  <p className="text-sm text-gray-600">Gender data helps for reporting and analysis</p>
+                  <p className="text-sm text-gray-600">Course allocation requires a semester and group</p>
                 </li>
               </ul>
             </div>
@@ -444,24 +608,12 @@ const LecturersPanel = () => {
             <table className="min-w-full">
               <thead className="bg-gray-50/80 border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Lecturer
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Contact
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Gender
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Registration Date
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Actions
-                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Lecturer</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Contact</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Gender</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Registration Date</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -469,7 +621,7 @@ const LecturersPanel = () => {
                   <tr
                     key={teacher.id}
                     className="hover:bg-gray-50/50 transition-colors cursor-pointer group"
-                    onClick={() => (window.location.href = "/admin/teacher/" + teacher.id)}
+                    onClick={() => navigate("/admin/teacher/" + teacher.id)}
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -499,18 +651,16 @@ const LecturersPanel = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                        teacher.lecturer?.gender === "M" 
-                          ? "bg-blue-100 text-blue-800" 
-                          : teacher.lecturer?.gender === "F" 
-                          ? "bg-pink-100 text-pink-800" 
-                          : "bg-gray-100 text-gray-800"
-                      }`}>
-                        {teacher.lecturer?.gender === "M" 
-                          ? "Male" 
-                          : teacher.lecturer?.gender === "F" 
-                          ? "Female" 
-                          : "-"}
+                      <span
+                        className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                          teacher.lecturer?.gender === "M"
+                            ? "bg-blue-100 text-blue-800"
+                            : teacher.lecturer?.gender === "F"
+                            ? "bg-pink-100 text-pink-800"
+                            : "bg-gray-100 text-gray-800"
+                        }`}
+                      >
+                        {teacher.lecturer?.gender === "M" ? "Male" : teacher.lecturer?.gender === "F" ? "Female" : "-"}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -520,7 +670,7 @@ const LecturersPanel = () => {
                           {new Date(teacher.lecturer?.date_joined).toLocaleDateString("en-US", {
                             year: "numeric",
                             month: "short",
-                            day: "numeric"
+                            day: "numeric",
                           })}
                         </p>
                       </div>
@@ -536,7 +686,7 @@ const LecturersPanel = () => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            window.location.href = "/admin/teacher/" + teacher.id;
+                            navigate("/admin/teacher/" + teacher.id);
                           }}
                           className="p-2 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
                           title="View"
@@ -546,7 +696,7 @@ const LecturersPanel = () => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            window.location.href = "/admin/teacher/" + teacher.id + "/edit";
+                            navigate("/admin/teacher/" + teacher.id + "/edit");
                           }}
                           className="p-2 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors"
                           title="Edit"

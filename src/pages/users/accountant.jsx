@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { CheckCircle, XCircle, Clock, Eye, Check, X, Send, Upload, ChevronRight, CreditCard, LogOut, Users, Layers, AlertCircle, Plus, Bell } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { CheckCircle, XCircle, Clock, Eye, Check, X, Send, ChevronRight, CreditCard, Layers, Plus, Bell, Edit3, FileText } from "lucide-react";
 import api from "../../api";
+import AccountantContracts from "./accountant/AccountantContracts";
 
 /* ── small helpers ── */
 const badge = (color, text) => (
@@ -41,7 +43,11 @@ function Toast({ msg }) {
 
 /* ══════════════════════════════════════════════════════════ */
 export default function AccountantDashboard() {
-  const [tab, setTab] = useState("programs"); // programs | verify
+  const location = useLocation();
+  const navigate = useNavigate();
+  const tab = location.pathname === "/accountant/verify" ? "verify"
+    : location.pathname === "/accountant/contracts" ? "contracts"
+    : "programs";
   const [programs, setPrograms] = useState([]);
   const [groups, setGroups] = useState([]);
   const [students, setStudents] = useState([]);
@@ -54,6 +60,8 @@ export default function AccountantDashboard() {
   const [notifyForm, setNotifyForm] = useState({ message: "" });
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [feeModal, setFeeModal] = useState(null); // program object or null
+  const [feeForm, setFeeForm] = useState("");
 
   const showToast = (type, text) => { setToast({ type, text }); setTimeout(() => setToast(null), 3500); };
 
@@ -111,53 +119,41 @@ export default function AccountantDashboard() {
     setLoading(false);
   };
 
+  /* update program tuition fee */
+  const updateProgramFee = async () => {
+    if (!feeModal) return;
+    const val = parseFloat(feeForm);
+    if (isNaN(val) || val < 0) return showToast("error", "Enter a valid price");
+    setLoading(true);
+    try {
+      await api.patch(`finance/accountant/programs/${feeModal.id}/update-fee/`, { tuition_fee: val });
+      showToast("success", `Price updated to ${val.toLocaleString()} сом`);
+      setFeeModal(null);
+      setFeeForm("");
+      loadPrograms();
+    } catch { showToast("error", "Failed to update price"); }
+    setLoading(false);
+  };
+
   /* ── render ── */
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex">
-      {/* Sidebar */}
-      <aside className="w-60 bg-[#0f172a] text-slate-300 flex flex-col fixed h-full z-50">
-        <div className="p-6 border-b border-slate-800 flex items-center gap-3">
-          <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center">
-            <CreditCard className="w-4 h-4 text-white" />
-          </div>
-          <span className="font-black text-white text-xs uppercase tracking-widest">Finance</span>
-        </div>
-        <nav className="flex-1 p-4 space-y-1 mt-4">
-          {[
-            { id: "programs", icon: <Layers className="w-4 h-4" />, label: "Programs" },
-            { id: "verify", icon: <Clock className="w-4 h-4" />, label: "Verify Payments", badge: pending.length },
-          ].map(item => (
-            <button key={item.id} onClick={() => setTab(item.id)}
-              className={`w-full flex items-center gap-3 p-3 rounded-xl text-xs font-bold uppercase transition-all relative ${tab === item.id ? "bg-emerald-600/20 text-emerald-400 border border-emerald-600/30" : "hover:bg-slate-800/50"}`}>
-              {item.icon} {item.label}
-              {item.badge > 0 && <span className="absolute right-3 w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center">{item.badge}</span>}
-            </button>
-          ))}
-        </nav>
-        <div className="p-4 border-t border-slate-800">
-          <a href="/logout" className="flex items-center gap-3 p-3 rounded-xl text-rose-400 hover:bg-rose-500/10 transition-all text-xs font-bold uppercase">
-            <LogOut className="w-4 h-4" /> Logout
-          </a>
-        </div>
-      </aside>
+    <div className="p-8">
+      {/* Tab switcher */}
+      <div className="flex gap-2 mb-8">
+        {[
+          { id: "programs", icon: <Layers className="w-4 h-4" />, label: "Programs", path: "/accountant/programs" },
+          { id: "verify", icon: <Clock className="w-4 h-4" />, label: "Verify Payments", badge: pending.length, path: "/accountant/verify" },
+          { id: "contracts", icon: <FileText className="w-4 h-4" />, label: "Contracts", path: "/accountant/contracts" },
+        ].map(item => (
+          <button key={item.id} onClick={() => navigate(item.path)}
+            className={`relative flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${tab === item.id ? "bg-emerald-600 text-white shadow-lg shadow-emerald-200" : "bg-white border border-slate-200 text-slate-600 hover:border-emerald-300"}`}>
+            {item.icon} {item.label}
+            {item.badge > 0 && <span className="w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center">{item.badge}</span>}
+          </button>
+        ))}
+      </div>
 
-      {/* Main */}
-      <main className="flex-1 ml-60">
-        {/* Header */}
-        <header className="h-14 bg-white border-b border-slate-200 flex items-center px-8 gap-3 sticky top-0 z-40">
-          <CreditCard className="w-4 h-4 text-emerald-500" />
-          <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Accountant</span>
-          <ChevronRight className="w-3 h-3 text-slate-300" />
-          <span className="text-xs font-black text-slate-800 uppercase tracking-widest">{tab === "programs" ? "Programs" : "Verify Payments"}</span>
-          {breadcrumb.map((b, i) => (
-            <React.Fragment key={i}>
-              <ChevronRight className="w-3 h-3 text-slate-300" />
-              <span className="text-xs font-black text-slate-500">{b.label}</span>
-            </React.Fragment>
-          ))}
-        </header>
-
-        <div className="p-8">
+      <div>
           {/* ── Programs tab ── */}
           {tab === "programs" && (
             <div>
@@ -167,21 +163,38 @@ export default function AccountantDashboard() {
                   <h1 className="text-2xl font-black text-slate-900 mb-6">Select Program</h1>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {programs.map(prog => (
-                      <button key={prog.id} onClick={() => loadGroups(prog)}
-                        className="bg-white rounded-2xl p-6 border border-slate-200 hover:border-emerald-400 hover:shadow-md transition-all text-left group">
-                        <div className="flex justify-between items-start mb-4">
-                          <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
-                            <Layers className="w-5 h-5 text-emerald-600" />
+                      <div key={prog.id}
+                        className="bg-white rounded-2xl p-6 border border-slate-200 hover:border-emerald-400 hover:shadow-md transition-all text-left group relative">
+                        {/* Clickable top area navigates into groups */}
+                        <button onClick={() => loadGroups(prog)} className="w-full text-left">
+                          <div className="flex justify-between items-start mb-4">
+                            <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+                              <Layers className="w-5 h-5 text-emerald-600" />
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-500 transition-colors" />
                           </div>
-                          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-500 transition-colors" />
+                          <h3 className="font-black text-slate-900 mb-1">{prog.name}</h3>
+                          <p className="text-xs text-slate-400 font-bold mb-3">{prog.group_count} groups · {prog.student_count} students</p>
+                          <div className="flex gap-3 text-xs mb-3">
+                            <span className="text-emerald-600 font-black">Paid: {prog.total_paid}</span>
+                            <span className="text-rose-500 font-black">Debt: {prog.total_debt}</span>
+                          </div>
+                        </button>
+                        {/* Bottom row: tuition fee + change price button */}
+                        <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                          <div className="text-xs">
+                            <span className="text-slate-400 font-bold">Tuition: </span>
+                            <span className="text-indigo-600 font-black">{prog.tuition_fee > 0 ? `${Number(prog.tuition_fee).toLocaleString()} сом` : "Not set"}</span>
+                          </div>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setFeeModal(prog); setFeeForm(prog.tuition_fee || ""); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all text-[11px] font-black uppercase tracking-wider"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            Change Price
+                          </button>
                         </div>
-                        <h3 className="font-black text-slate-900 mb-1">{prog.name}</h3>
-                        <p className="text-xs text-slate-400 font-bold mb-3">{prog.group_count} groups · {prog.student_count} students</p>
-                        <div className="flex gap-3 text-xs">
-                          <span className="text-emerald-600 font-black">Paid: {prog.total_paid}</span>
-                          <span className="text-rose-500 font-black">Debt: {prog.total_debt}</span>
-                        </div>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 </>
@@ -284,6 +297,9 @@ export default function AccountantDashboard() {
             </div>
           )}
 
+          {/* ── Contracts tab ── */}
+          {tab === "contracts" && <AccountantContracts />}
+
           {/* ── Verify tab ── */}
           {tab === "verify" && (
             <div>
@@ -332,7 +348,6 @@ export default function AccountantDashboard() {
             </div>
           )}
         </div>
-      </main>
 
       {/* Create Invoice Modal */}
       <Modal open={modal === "invoice"} title={`Create Invoice — ${selectedGroup?.name}`} onClose={() => setModal(null)}>
@@ -385,6 +400,35 @@ export default function AccountantDashboard() {
             <button onClick={sendDebtNotif} disabled={loading}
               className="flex-1 py-2.5 bg-rose-600 text-white text-xs font-black uppercase rounded-xl hover:bg-rose-700 disabled:opacity-50 flex items-center justify-center gap-2">
               <Send className="w-4 h-4" /> {loading ? "Sending..." : "Send Notification"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Change Tuition Fee Modal */}
+      <Modal open={!!feeModal} title={`Set Price — ${feeModal?.name}`} onClose={() => setFeeModal(null)}>
+        <div className="space-y-4">
+          <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 mb-4">
+            <p className="text-xs font-bold text-indigo-600">
+              Current Price: <span className="text-lg font-black">{feeModal?.tuition_fee > 0 ? `${Number(feeModal.tuition_fee).toLocaleString()} сом` : "Not set"}</span>
+            </p>
+          </div>
+          <div>
+            <label className="block text-xs font-black text-slate-500 uppercase mb-1">New Tuition Fee (сом)</label>
+            <input 
+              type="number" 
+              value={feeForm} 
+              onChange={e => setFeeForm(e.target.value)}
+              placeholder="e.g. 50000"
+              className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-400" 
+            />
+            <p className="text-[10px] text-slate-400 mt-1 font-medium">This price will apply to the entire program per semester.</p>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button onClick={() => setFeeModal(null)} className="flex-1 py-2.5 bg-slate-100 text-slate-600 text-xs font-black uppercase rounded-xl hover:bg-slate-200 transition-colors">Cancel</button>
+            <button onClick={updateProgramFee} disabled={loading || !feeForm}
+              className="flex-1 py-2.5 bg-indigo-600 text-white text-xs font-black uppercase rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+              <Edit3 className="w-4 h-4" /> {loading ? "Saving..." : "Save Price"}
             </button>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import React, {  useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import api from "../../api";
 import {
   Plus,
@@ -23,6 +24,7 @@ import {
 } from "lucide-react";
 
 const StudentsPanel = () => {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -31,6 +33,7 @@ const StudentsPanel = () => {
     phone: "",
     email: "",
     group: "",
+    password: "",
   });
 
   const [groups, setGroups] = useState([]);
@@ -127,6 +130,7 @@ const StudentsPanel = () => {
           address: formData.address,
           phone: formData.phone,
           email: formData.email,
+          ...(formData.password ? { password: formData.password } : {}),
         },
         group: parseInt(formData.group),
       };
@@ -142,6 +146,7 @@ const StudentsPanel = () => {
         phone: "",
         email: "",
         group: "",
+        password: "",
       });
       
       fetchStudents();
@@ -195,13 +200,13 @@ const StudentsPanel = () => {
               <h1 className="text-3xl font-bold text-gray-900">Student Management</h1>
               <p className="text-gray-600 mt-1">Create and manage student accounts</p>
             </div>
-            <a
-              href="/"
+            <Link
+              to="/"
               className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
             >
               <ChevronRight className="w-4 h-4 rotate-180" />
               Back to Dashboard
-            </a>
+            </Link>
           </div>
 
           {/* Stats */}
@@ -429,6 +434,23 @@ const StudentsPanel = () => {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <span className="flex items-center gap-2">
+                      <Shield className="w-4 h-4" />
+                      Custom Password (Optional)
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    placeholder="Leave blank to auto-generate and email"
+                  />
+                </div>
+
                 <div className="flex justify-end pt-4">
                   <button
                     type="submit"
@@ -488,7 +510,7 @@ const StudentsPanel = () => {
                   <span className="text-sm font-medium text-gray-700">Assign Courses</span>
                 </button>
                 <button 
-                  onClick={() => window.location.href = "/admin/groups"}
+                  onClick={() => navigate("/admin/groups")}
                   className="w-full flex items-center gap-3 p-3 bg-purple-50 hover:bg-purple-100 rounded-xl transition-colors"
                 >
                   <GraduationCap className="w-5 h-5 text-purple-600" />
@@ -564,7 +586,7 @@ const StudentsPanel = () => {
                   <tr
                     key={student.id}
                     className="hover:bg-gray-50/50 transition-colors cursor-pointer group"
-                    onClick={() => (window.location.href = "/admin/student/" + student.id)}
+                    onClick={() => navigate("/admin/student/" + student.id)}
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -632,7 +654,7 @@ const StudentsPanel = () => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            window.location.href = "/admin/student/" + student.id;
+                            navigate("/admin/student/" + student.id);
                           }}
                           className="p-2 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
                           title="View"
@@ -642,7 +664,7 @@ const StudentsPanel = () => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            window.location.href = "/admin/student/" + student.id + "/edit";
+                            navigate("/admin/student/" + student.id + "/edit");
                           }}
                           className="p-2 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors"
                           title="Edit"

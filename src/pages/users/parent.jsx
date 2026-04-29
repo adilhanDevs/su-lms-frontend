@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import api from "../../api";
 import {
   User,
@@ -28,7 +29,9 @@ import {
   Upload,
   Send,
   XCircle,
-  Info
+  Info,
+  X,
+  Loader2,
 } from "lucide-react";
 
 const ParentDashboard = () => {
@@ -53,6 +56,8 @@ const ParentDashboard = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const [uploadLoading, setUploadLoading] = useState(false);
   const [message, setMessage] = useState(null);
+  const [payModal, setPayModal] = useState(null);
+  const [payForm, setPayForm] = useState({ amount: "", receipt: null });
 
   const fetchAllData = useCallback(async () => {
     setLoading(true);
@@ -79,26 +84,30 @@ const ParentDashboard = () => {
 
   const fetchChildDetails = useCallback(async (childId) => {
     if (!childId) return;
-    
-    try {
-      const gradesRes = await api.get(`result/api/grade-semesters/my_all_grades/?student=${childId}`);
-      const attendanceRes = await api.get(`attendance/api/attendances/?student=${childId}`);
-      const invoicesRes = await api.get(`api/finance/my-invoices/?student=${childId}`);
-      const paymentsRes = await api.get(`api/finance/my-payments/?student=${childId}`);
-      const balanceRes = await api.get(`api/finance/my-balance/?student=${childId}`);
-      
-      setChildData({
-        grades: Array.isArray(gradesRes.data) ? gradesRes.data.find(g => g.student_id === childId) || gradesRes.data[0] : gradesRes.data,
-        attendance: attendanceRes.data,
-        finance: {
-          invoices: invoicesRes.data,
-          payments: paymentsRes.data,
-          balance: Array.isArray(balanceRes.data) ? balanceRes.data.find(b => b.student_id === childId) : balanceRes.data
-        }
-      });
-    } catch (error) {
-      console.error("Error fetching child details:", error);
-    }
+
+    const [gradesRes, attendanceRes, invoicesRes, paymentsRes, balanceRes] = await Promise.allSettled([
+      api.get(`result/api/grade-semesters/my_all_grades/?student=${childId}`),
+      api.get(`attendance/attendances/?student=${childId}`),
+      api.get(`finance/my/invoices/?student=${childId}`),
+      api.get(`finance/my/payments/?student=${childId}`),
+      api.get(`finance/my/balance/?student=${childId}`),
+    ]);
+
+    const val = (res, fallback) => res.status === 'fulfilled' ? res.value.data : fallback;
+
+    const gradesData = val(gradesRes, null);
+    setChildData({
+      grades: Array.isArray(gradesData) ? gradesData.find(g => g.student_id === childId) || gradesData[0] : gradesData,
+      attendance: val(attendanceRes, []),
+      finance: {
+        invoices: val(invoicesRes, []),
+        payments: val(paymentsRes, []),
+        balance: (() => {
+          const b = val(balanceRes, null);
+          return Array.isArray(b) ? b.find(x => x.student_id === childId) || b[0] : b;
+        })(),
+      },
+    });
   }, []);
 
   useEffect(() => {
@@ -111,28 +120,40 @@ const ParentDashboard = () => {
     }
   }, [selectedChild, fetchChildDetails]);
 
-  const handleReceiptUpload = async (e, invoiceId) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const openPayModal = (invoice) => {
+    const remaining = Number(invoice.amount) - Number(invoice.total_paid || 0);
+    setPayForm({ amount: remaining > 0 ? String(remaining) : String(invoice.amount), receipt: null });
+    setPayModal(invoice);
+  };
 
+  const handlePaySubmit = async (e) => {
+    e.preventDefault();
+    if (!payForm.amount || Number(payForm.amount) <= 0) {
+      setMessage({ type: "error", text: "Please enter a valid amount" });
+      return;
+    }
+    if (!payForm.receipt) {
+      setMessage({ type: "error", text: "Please attach a receipt" });
+      return;
+    }
     setUploadLoading(true);
     const formData = new FormData();
-    formData.append("invoice", invoiceId);
+    formData.append("invoice", payModal.id);
     formData.append("student", selectedChild.id);
-    formData.append("amount", childData.finance.invoices.find(i => i.id === invoiceId).amount);
+    formData.append("amount", payForm.amount);
     formData.append("payment_method", "transfer");
-    formData.append("receipt", file);
-    formData.append("comment", "Manual receipt upload via Parent Portal");
-
+    formData.append("receipt", payForm.receipt);
+    formData.append("comment", "Receipt uploaded via Parent Portal");
     try {
-      await api.post("api/finance/my/payments/upload/", formData, {
+      await api.post("finance/my/payments/upload/", formData, {
         headers: { "Content-Type": "multipart/form-data" }
       });
-      setMessage({ type: "success", text: "Receipt uploaded! Awaiting accountant verification." });
+      setMessage({ type: "success", text: "Receipt sent! Awaiting accountant verification." });
+      setPayModal(null);
       fetchChildDetails(selectedChild.id);
     } catch (err) {
-      console.error("Upload error:", err);
-      setMessage({ type: "error", text: "Failed to upload receipt." });
+      console.error("Payment error:", err);
+      setMessage({ type: "error", text: "Failed to submit receipt." });
     } finally {
       setUploadLoading(false);
       setTimeout(() => setMessage(null), 5000);
@@ -146,6 +167,24 @@ const ParentDashboard = () => {
     } catch (err) {
       console.error("Error marking as read:", err);
     }
+  };
+
+  const computeGpa = () => {
+    const gp = {
+      "A+": 4.0, A: 4.0, "A-": 3.7,
+      "B+": 3.3, B: 3.0, "B-": 2.7,
+      "C+": 2.3, C: 2.0, "C-": 1.7,
+      D: 1.0, F: 0.0,
+    };
+    const semesterGrades = childData.grades?.semester_grades || [];
+    let total = 0, n = 0;
+    semesterGrades.forEach((g) => {
+      if (g.grade && gp[g.grade] !== undefined) {
+        total += gp[g.grade];
+        n++;
+      }
+    });
+    return n > 0 ? (total / n).toFixed(2) : "—";
   };
 
   const getGradeColor = (grade) => {
@@ -220,9 +259,9 @@ const ParentDashboard = () => {
                 ))}
               </div>
             </div>
-            <a href="/logout" className="p-3 bg-white border border-slate-200 text-slate-600 rounded-2xl hover:bg-rose-50 hover:text-rose-600 transition-all shadow-sm">
+            <Link to="/logout" className="p-3 bg-white border border-slate-200 text-slate-600 rounded-2xl hover:bg-rose-50 hover:text-rose-600 transition-all shadow-sm">
               <LogOut className="w-6 h-6" />
-            </a>
+            </Link>
           </div>
         </div>
 
@@ -250,7 +289,7 @@ const ParentDashboard = () => {
                     <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Academic Standing</p>
                     <div className="flex items-center justify-between">
                        <span className="font-bold text-slate-700">GPA Equivalent</span>
-                       <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-lg font-black text-xs">3.8</span>
+                       <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-lg font-black text-xs">{computeGpa()}</span>
                     </div>
                  </div>
                </div>
@@ -320,12 +359,30 @@ const ParentDashboard = () => {
                         <h3 className="text-xl font-black text-slate-900 mb-8">Financial Overview</h3>
                         <div className="bg-emerald-50 rounded-[2rem] p-6 border border-emerald-100 mb-6">
                            <p className="text-[10px] font-black text-emerald-600 uppercase mb-1">Total Paid</p>
-                           <p className="text-3xl font-black text-slate-900">{childData.finance.balance?.total_paid || 0} KGS</p>
+                           <p className="text-3xl font-black text-slate-900">{Number(childData.finance.balance?.total_paid || 0).toLocaleString()} KGS</p>
                         </div>
-                        <div className="bg-rose-50 rounded-[2rem] p-6 border border-rose-100">
+                        <div className="bg-rose-50 rounded-[2rem] p-6 border border-rose-100 mb-6">
                            <p className="text-[10px] font-black text-rose-600 uppercase mb-1">Remaining Debt</p>
-                           <p className="text-3xl font-black text-slate-900">{childData.finance.balance?.balance || 0} KGS</p>
+                           <p className="text-3xl font-black text-slate-900">{Number(childData.finance.balance?.balance || 0).toLocaleString()} KGS</p>
                         </div>
+                        {childData.finance.invoices.some(inv => inv.status !== 'paid') ? (
+                          <button
+                            onClick={() => {
+                              const first = childData.finance.invoices.find(inv => inv.status !== 'paid');
+                              if (first) openPayModal(first);
+                            }}
+                            className="w-full py-4 bg-slate-900 text-white rounded-[1.5rem] font-black text-sm uppercase flex items-center justify-center gap-2 hover:bg-slate-700 transition-all"
+                          >
+                            <CreditCard className="w-5 h-5" /> Pay Now
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setActiveTab("finance")}
+                            className="w-full py-4 bg-slate-50 text-slate-500 rounded-[1.5rem] font-black text-sm uppercase flex items-center justify-center gap-2 hover:bg-slate-100 transition-all border border-slate-200"
+                          >
+                            <DollarSign className="w-5 h-5" /> View Invoices
+                          </button>
+                        )}
                      </div>
                    </div>
                 )}
@@ -372,32 +429,37 @@ const ParentDashboard = () => {
                             Active Invoices & Payments
                          </h3>
                          <div className="space-y-6">
-                            {childData.finance.invoices.map(invoice => (
+                            {childData.finance.invoices.length === 0 ? (
+                              <div className="text-center py-12 text-slate-400">
+                                <CreditCard className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                                <p className="font-bold text-sm">No invoices found</p>
+                              </div>
+                            ) : childData.finance.invoices.map(invoice => (
                               <div key={invoice.id} className="bg-slate-50 rounded-[2rem] p-8 border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-8">
                                  <div>
                                     <div className="flex items-center gap-3 mb-2">
                                        <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase ${
-                                         invoice.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                                         invoice.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
+                                         invoice.status === 'partially_paid' ? 'bg-blue-100 text-blue-700' :
+                                         invoice.status === 'overdue' ? 'bg-rose-100 text-rose-700' :
+                                         'bg-amber-100 text-amber-700'
                                        }`}>
-                                          {invoice.status}
+                                          {invoice.status === 'partially_paid' ? 'Partial' : invoice.status}
                                        </span>
                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Due: {invoice.due_date}</span>
                                     </div>
                                     <h4 className="text-xl font-black text-slate-900">{invoice.title}</h4>
-                                    <p className="text-slate-500 font-bold text-lg mt-1">{invoice.amount} KGS</p>
+                                    <p className="text-slate-500 font-bold text-lg mt-1">{Number(invoice.amount).toLocaleString()} KGS</p>
+                                    {invoice.status === 'partially_paid' && Number(invoice.total_paid) > 0 && (
+                                      <p className="text-xs text-blue-600 font-bold mt-1">Paid: {Number(invoice.total_paid).toLocaleString()} KGS · Remaining: {(Number(invoice.amount) - Number(invoice.total_paid)).toLocaleString()} KGS</p>
+                                    )}
                                  </div>
-                                 {invoice.status !== 'paid' && (
-                                   <div className="flex flex-col items-center gap-3">
-                                      <label className={`flex items-center gap-3 px-6 py-3 rounded-2xl font-black text-xs uppercase cursor-pointer transition-all ${
-                                        uploadLoading ? 'bg-slate-100 text-slate-400' : 'bg-slate-900 text-white hover:bg-slate-800'
-                                      }`}>
-                                         <Upload className="w-4 h-4" />
-                                         {uploadLoading ? "Uploading..." : "Upload Receipt Check"}
-                                         <input type="file" className="hidden" onChange={(e) => handleReceiptUpload(e, invoice.id)} disabled={uploadLoading} />
-                                      </label>
-                                      <p className="text-[9px] text-slate-400 font-bold uppercase text-center">Format: JPG, PNG, PDF</p>
-                                   </div>
-                                 )}
+                                 <button
+                                   onClick={() => openPayModal(invoice)}
+                                   className="flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-xs uppercase transition-all shrink-0 bg-slate-900 text-white hover:bg-slate-700 cursor-pointer"
+                                 >
+                                   <CreditCard className="w-4 h-4" /> Pay
+                                 </button>
                               </div>
                             ))}
                          </div>
@@ -503,6 +565,68 @@ const ParentDashboard = () => {
           </div>
         )}
       </div>
+
+      {/* Pay Modal */}
+      {payModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setPayModal(null)}>
+          <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b border-slate-100">
+              <h2 className="text-lg font-black text-slate-900">Submit Payment</h2>
+              <button onClick={() => setPayModal(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handlePaySubmit} className="p-6 space-y-5">
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <p className="font-black text-slate-900">{payModal.title}</p>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  Total: <strong>{Number(payModal.amount).toLocaleString()} KGS</strong>
+                  {Number(payModal.total_paid || 0) > 0 && (
+                    <> · Remaining: <strong className="text-rose-600">{(Number(payModal.amount) - Number(payModal.total_paid)).toLocaleString()} KGS</strong></>
+                  )}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Payment Amount (KGS) *</label>
+                <input
+                  type="number"
+                  min="1"
+                  step="any"
+                  value={payForm.amount}
+                  onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))}
+                  placeholder="Enter amount"
+                  className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:border-slate-400 transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Upload Receipt *</label>
+                <label className="flex items-center gap-3 w-full px-4 py-4 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-slate-400 transition-colors">
+                  <Upload className="w-5 h-5 text-slate-400" />
+                  <span className="text-sm text-slate-500">
+                    {payForm.receipt ? payForm.receipt.name : "Choose file (image or PDF)"}
+                  </span>
+                  <input type="file" className="hidden" accept="image/*,.pdf"
+                    onChange={e => setPayForm(f => ({ ...f, receipt: e.target.files[0] || null }))} />
+                </label>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setPayModal(null)}
+                  className="flex-1 py-3 bg-slate-100 text-slate-600 text-xs font-black uppercase rounded-2xl hover:bg-slate-200">
+                  Cancel
+                </button>
+                <button type="submit" disabled={uploadLoading || !payForm.receipt || !payForm.amount || Number(payForm.amount) <= 0}
+                  className="flex-1 py-3 bg-slate-900 text-white text-xs font-black uppercase rounded-2xl hover:bg-slate-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                  {uploadLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Send Receipt
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,38 +1,88 @@
 import React, { useState } from "react";
-import { 
-  LayoutDashboard, 
-  Users, 
-  BookOpen, 
-  Calendar, 
-  Clock, 
-  FileText, 
-  BarChart3, 
-  LogOut, 
-  Menu, 
-  X, 
-  Shield, 
+import {
+  LayoutDashboard,
+  Users,
+  BookOpen,
+  Calendar,
+  Clock,
+  FileText,
+  BarChart3,
+  LogOut,
+  Menu,
+  X,
+  Shield,
   ChevronRight,
   Bell,
   Search,
   UserPlus,
   Key,
-  Database
+  Database,
+  Receipt,
+  UserCheck,
+  ScrollText,
+  CreditCard,
+  Layers,
+  CheckSquare,
+  UserCog,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
 
 const AdminLayout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const location = useLocation();
+  const { role } = useAuth();
 
-  const menuItems = [
+  const adminMenuItems = [
     { title: "Dashboard", icon: <LayoutDashboard className="w-5 h-5" />, link: "/" },
     { title: "Lecturers", icon: <UserPlus className="w-5 h-5" />, link: "/admin/create-lecturers" },
     { title: "Students", icon: <Users className="w-5 h-5" />, link: "/admin/create-students" },
+    { title: "Parents", icon: <UserCheck className="w-5 h-5" />, link: "/admin/parents" },
     { title: "Courses", icon: <BookOpen className="w-5 h-5" />, link: "/admin/courses" },
     { title: "Groups", icon: <Database className="w-5 h-5" />, link: "/admin/groups" },
     { title: "Schedule", icon: <Calendar className="w-5 h-5" />, link: "/admin/schedule" },
     { title: "Lesson Times", icon: <Clock className="w-5 h-5" />, link: "/admin/lesson-times" },
+    { title: "Invoices", icon: <Receipt className="w-5 h-5" />, link: "/admin/invoices" },
+    { title: "Contracts", icon: <FileText className="w-5 h-5" />, link: "/admin/contracts" },
+    { title: "Audit Logs", icon: <ScrollText className="w-5 h-5" />, link: "/admin/audit-logs" },
+    { title: "Staff", icon: <UserCog className="w-5 h-5" />, link: "/admin/staff" },
   ];
+
+  const methodologistMenuItems = [
+    { title: "Overview", icon: <LayoutDashboard className="w-5 h-5" />, link: "/" },
+    { title: "All Schedules", icon: <Calendar className="w-5 h-5" />, link: "/methodologist/schedules" },
+    { title: "Programs", icon: <BookOpen className="w-5 h-5" />, link: "/methodologist/programs" },
+    { title: "Courses", icon: <Layers className="w-5 h-5" />, link: "/methodologist/courses" },
+    { title: "Documents", icon: <FileText className="w-5 h-5" />, link: "/methodologist/documents" },
+    { title: "Performance", icon: <BarChart3 className="w-5 h-5" />, link: "/methodologist/performance" },
+  ];
+
+  const accountantMenuItems = [
+    { title: "Dashboard", icon: <LayoutDashboard className="w-5 h-5" />, link: "/" },
+    { title: "Programs", icon: <Layers className="w-5 h-5" />, link: "/accountant/programs" },
+    { title: "Verify Payments", icon: <CheckSquare className="w-5 h-5" />, link: "/accountant/verify" },
+    { title: "Contracts", icon: <FileText className="w-5 h-5" />, link: "/accountant/contracts" },
+  ];
+
+  const menuItems =
+    role === 'admin' ? adminMenuItems :
+    role === 'accountant' ? accountantMenuItems :
+    methodologistMenuItems;
+
+  const panelTitle =
+    role === 'admin' ? "ADMIN PANEL" :
+    role === 'accountant' ? "FINANCE" :
+    "METHODOLOGIST";
+
+  const panelIcon =
+    role === 'admin' ? <Shield className="w-5 h-5 text-white" /> :
+    role === 'accountant' ? <CreditCard className="w-5 h-5 text-white" /> :
+    <BarChart3 className="w-5 h-5 text-white" />;
+
+  const panelColor =
+    role === 'admin' ? "bg-blue-600" :
+    role === 'accountant' ? "bg-emerald-600" :
+    "bg-indigo-600";
 
   const isActive = (path) => location.pathname === path;
 
@@ -46,10 +96,10 @@ const AdminLayout = ({ children }) => {
       >
         <div className="p-6 flex items-center justify-between border-b border-slate-800">
           <div className={`flex items-center gap-3 ${!sidebarOpen && "hidden"}`}>
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-              <Shield className="w-5 h-5 text-white" />
+            <div className={`w-8 h-8 ${panelColor} rounded-lg flex items-center justify-center`}>
+              {panelIcon}
             </div>
-            <span className="font-bold text-white tracking-tight">ADMIN PANEL</span>
+            <span className="font-bold text-white tracking-tight">{panelTitle}</span>
           </div>
           <button 
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -94,8 +144,8 @@ const AdminLayout = ({ children }) => {
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 sticky top-0 z-40">
           <div className="flex items-center gap-4 flex-1">
             <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-widest overflow-hidden whitespace-nowrap">
-              <Shield className="w-4 h-4" />
-              <span>Admin</span>
+              {panelIcon}
+              <span>{role}</span>
               <ChevronRight className="w-3 h-3" />
               <span className="text-slate-900">{location.pathname.split('/').filter(Boolean).pop() || 'Dashboard'}</span>
             </div>
@@ -111,9 +161,9 @@ const AdminLayout = ({ children }) => {
           </div>
           
           <div className="flex items-center gap-6">
-            <a href="/" target="_blank" className="text-xs font-bold text-blue-600 hover:underline uppercase tracking-wider hidden sm:block">
+            <Link to="/" className="text-xs font-bold text-blue-600 hover:underline uppercase tracking-wider hidden sm:block">
               View Site
-            </a>
+            </Link>
             <button className="relative p-2 text-slate-500 hover:bg-slate-50 rounded-xl transition-colors">
               <Bell className="w-5 h-5" />
               <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-rose-500 rounded-full border border-white"></span>

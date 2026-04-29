@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import api from "../../api";
 import {
   Plus,
@@ -138,10 +139,10 @@ function GroupsCrud() {
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-               <a href="/admin/create-students" className="text-blue-600 hover:underline flex items-center gap-1">
+               <Link to="/admin/create-students" className="text-blue-600 hover:underline flex items-center gap-1">
                  <ChevronRight className="w-4 h-4 rotate-180" />
                  Back to Students
-               </a>
+               </Link>
             </div>
             <h1 className="text-3xl font-bold text-gray-900">Groups Management</h1>
             <p className="text-gray-600">Create and manage student groups and their programs</p>
